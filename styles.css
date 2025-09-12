@@ -6,7 +6,8 @@
    :root {
     /* Color Palette - Modern, Professional */
     --primary-color: #0066FF;
-    --primary-hover: #0052CC;
+    --primary-hover: #000000;
+    --hover-text-color: #f3b723;
     --success-color: #00C781;
     --danger-color: #FF3B30;
     --warning-color: #FF9500;
@@ -65,7 +66,8 @@ body.dark-mode {
     --neutral-800: #D9D9D9;
     --neutral-900: #F5F5F5;
     --primary-color: #3385FF;
-    --primary-hover: #5294FF;
+    --primary-hover: #000000;
+    --hover-text-color: #f3b723;
     --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -103,7 +105,8 @@ body {
     --neutral-800: #D9D9D9;
     --neutral-900: #F5F5F5;
     --primary-color: #3385FF;
-    --primary-hover: #5294FF;
+    --primary-hover: #000000;
+    --hover-text-color: #f3b723;
     --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -141,7 +144,8 @@ a {
 }
 
 a:hover {
-    color: var(--primary-hover);
+    color: var(--hover-text-color);
+    background-color: var(--primary-hover);
     text-decoration: underline;
 }
 
@@ -219,7 +223,8 @@ header > div {
 }
 
 #add-coin-btn:hover {
-    background: #333333;
+    background: var(--primary-hover);
+    color: var(--hover-text-color);
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
 }
@@ -240,7 +245,8 @@ header > div {
 }
 
 .header-right i:hover {
-    background: var(--neutral-300);
+    background: var(--primary-hover);
+    color: var(--hover-text-color);
     transform: translateY(-1px);
 }
 
@@ -275,6 +281,8 @@ header > div {
 
 .sumbox .header-left .logo:hover {
     opacity: 1;
+    background: var(--primary-hover);
+    color: var(--hover-text-color);
 }
 
 .sumbox .header-right {
@@ -300,7 +308,8 @@ header > div {
 }
 
 .sumbox .header-right #add-coin-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
+    background: var(--primary-hover);
+    color: var(--hover-text-color);
 }
 
 .sumbox .header-right i {
@@ -314,8 +323,8 @@ header > div {
 }
 
 .sumbox .header-right i:hover {
-    background: rgba(255, 255, 255, 0.3);
-    color: white;
+    background: var(--primary-hover);
+    color: var(--hover-text-color);
 }
 
 .sumbox::before {
@@ -401,8 +410,8 @@ thead th {
 }
 
 thead th:hover {
-    background: var(--neutral-300);
-    color: var(--neutral-800);
+    background: var(--primary-hover);
+    color: var(--hover-text-color);
 }
 
 tbody tr {
@@ -411,7 +420,8 @@ tbody tr {
 }
 
 tbody tr:hover {
-    background: var(--neutral-200);
+    background: var(--primary-hover);
+    color: var(--hover-text-color);
 }
 
 tbody td {
@@ -531,9 +541,9 @@ td:before {
 }
 
 .action-btn:hover {
-    background: #000000;
-    border-color: #000000;
-    color: white;
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+    color: var(--hover-text-color);
 }
 
 .action-btn.delete:hover {
@@ -656,7 +666,8 @@ button:hover,
 #save-coin-btn:hover,
 #save-currency-api-key:hover,
 #save-cache-limit:hover {
-    background: #333333;
+    background: var(--primary-hover);
+    color: var(--hover-text-color);
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
 }
@@ -698,8 +709,8 @@ select:focus {
 }
 
 .search-result-item:hover {
-    background: var(--primary-color);
-    color: white;
+    background: var(--primary-hover);
+    color: var(--hover-text-color);
 }
 
 .search-result-item img {
@@ -1272,7 +1283,8 @@ footer {
 }
 
 .footer-links a:hover {
-    color: var(--primary-color);
+    color: var(--hover-text-color);
+    background: var(--primary-hover);
     text-decoration: underline;
 }
 

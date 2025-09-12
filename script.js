@@ -531,6 +531,16 @@ function searchAssets(query) {
 // Function to fetch currency exchange rates
 function fetchCurrencyRates() {
     const apiKey = getCurrencyApiKey();
+    
+    // If no API key is set, return a rejected promise
+    if (!apiKey || apiKey === 'null' || apiKey.trim() === '') {
+        console.warn('Currency API key not configured, skipping currency rate fetch');
+        return $.Deferred().reject({ 
+            status: 401, 
+            message: 'Currency API key not configured' 
+        }).promise();
+    }
+    
     return $.ajax({
         url: `https://api.currencyapi.com/v3/latest?apikey=${apiKey}&currencies=`,
         method: 'GET',
@@ -1342,7 +1352,7 @@ $(document).ready(function() {
 
     function filterData() {
         let selectedFilter = $('#filter-symbol').val();
-        let symbolSearch = $('#symbol-search').val().toLowerCase().trim();
+        let symbolSearch = ($('#symbol-search').val() || '').toLowerCase().trim();
         let minTvl = $('#min-tvl').val();
         let maxTvl = $('#max-tvl').val();
         let minApy = $('#min-apy').val();
@@ -1355,14 +1365,21 @@ $(document).ready(function() {
         // Apply keyword search filter for symbol column (matches within words)
         if (symbolSearch) {
             filteredData = filteredData.filter(item => 
+                item.symbol && typeof item.symbol === 'string' && 
                 item.symbol.toLowerCase().includes(symbolSearch)
             );
         }
         
         if (selectedFilter === 'ETH') {
-            filteredData = filteredData.filter(item => item.symbol.includes('ETH'));
+            filteredData = filteredData.filter(item => 
+                item.symbol && typeof item.symbol === 'string' && 
+                item.symbol.includes('ETH')
+            );
         } else if (selectedFilter === 'USD') {
-            filteredData = filteredData.filter(item => item.symbol.includes('USD'));
+            filteredData = filteredData.filter(item => 
+                item.symbol && typeof item.symbol === 'string' && 
+                item.symbol.includes('USD')
+            );
         }
 
         minTvl = minTvl ? parseFloat(minTvl) : 0;

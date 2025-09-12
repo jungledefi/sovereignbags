@@ -315,13 +315,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
-    // Animate numbers on load
-    const totalValue = document.getElementById('total-computed-value');
-    if (totalValue) {
-        const value = parseFloat(totalValue.textContent.replace(/[^0-9.-]+/g, ''));
-        totalValue.textContent = '$0.00';
-        setTimeout(() => animateNumber(totalValue, 0, value, 1500), 500);
-    }
+    // Note: Number animation on page load disabled to prevent interfering with dynamic portfolio loading
+    // The total value is calculated and updated by updateTable() function after data loads
     
     // Add intersection observer for animations
     const observer = new IntersectionObserver((entries) => {

@@ -692,9 +692,9 @@ select:focus {
 
 /* Search Results */
 .search-results-container {
-    max-height: 400px;
+    max-height: 300px;
     overflow-y: auto;
-    margin-top: var(--spacing-md);
+    margin-top: var(--spacing-sm);
     border: 1px solid var(--neutral-300);
     border-radius: var(--radius-md);
 }
@@ -702,10 +702,12 @@ select:focus {
 .search-result-item {
     display: flex;
     align-items: center;
-    padding: var(--spacing-md);
+    padding: var(--spacing-xs) var(--spacing-sm);
     cursor: pointer;
     transition: all var(--transition-fast);
     border-bottom: 1px solid var(--neutral-200);
+    font-size: 13px;
+    line-height: 1.2;
 }
 
 .search-result-item:hover {
@@ -714,10 +716,34 @@ select:focus {
 }
 
 .search-result-item img {
-    width: 24px;
-    height: 24px;
-    margin-right: var(--spacing-sm);
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
     border-radius: var(--radius-full);
+    flex-shrink: 0;
+}
+
+.search-result-item .coin-info {
+    display: flex;
+    align-items: baseline;
+    gap: var(--spacing-xs);
+    flex: 1;
+    min-width: 0;
+}
+
+.search-result-item .coin-name {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-result-item .coin-symbol {
+    font-size: 11px;
+    opacity: 0.7;
+    text-transform: uppercase;
+    font-weight: 600;
+    flex-shrink: 0;
 }
 
 /* ============================================

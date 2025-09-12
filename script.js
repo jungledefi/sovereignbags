@@ -1005,10 +1005,10 @@ function displaySearchResults(assets) {
     assets.forEach(asset => {
         const resultItem = `
             <div class="search-result-item" data-asset-id="${asset.symbol}" data-asset-name="${asset.name}">
-                <div class="asset-info">
-                    <strong>${asset.symbol}</strong> - ${asset.name}
-                    ${asset.type_is_crypto ? '<span class="crypto-badge">CRYPTO</span>' : ''}
-                    ${asset.rank ? `<span class="rank-badge">Rank #${asset.rank}</span>` : ''}
+                <img src="${asset.icon_url || ''}" alt="${asset.symbol}" style="display: ${asset.icon_url ? 'block' : 'none'}">
+                <div class="coin-info">
+                    <span class="coin-name">${asset.name}</span>
+                    <span class="coin-symbol">${asset.symbol}</span>
                 </div>
             </div>
         `;

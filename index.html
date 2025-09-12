@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign Bag</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.0.0/crypto-js.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/paginationjs/2.1.5/pagination.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/paginationjs/2.1.5/pagination.css">
+
+</head>
+<body>
+    <!-- Replaced LiveCoinWatch widget with CoinMarketCap API integration -->
+    <div class="page"><div class="pageii">
+  
+
+<main>
+
+<div class="sumbox animate-in">
+        <div class="header-left">
+            <img src="logo-sb-dark.png" alt="Sovereign Bag Logo" class="logo">
+        </div>
+        <div class="header-right">
+            <div id="cached-count" class="cached-count">
+                <span id="asset-count">0</span> assets cached
+            </div>
+            <button id="add-coin-btn">Add Coin</button>
+            <i id="refresh-btn" class="fas fa-sync-alt" title="Refresh portfolio prices"></i>
+            <i id="refresh-cache-btn" class="fas fa-database" title="Refresh cached coins list"></i>
+            <i id="dark-mode-toggle" class="fas fa-moon"></i>
+            <i id="settings-icon" class="fas fa-cog"></i>
+        </div>
+
+        <div class="totalsum"><span>Bag Value 💰</span></div>
+        <div class="metricbox">
+            <div class="total-computed-value"><span id="total-computed-value">$0.00</span></div>
+            <div class="deltabubble">
+            <div class="total-change-percentage"><span id="total-change-percentage"></span> <span id="total-change-value"></span></div>
+        </div>
+    </div>
+
+</div>
+       
+        <div class="table-container">
+        <table id="holdings-table">
+            <thead>
+                <tr>
+                    <th class="desktop-header">Asset</th>
+                    <th class="desktop-header">Rate</th>
+                    <th class="desktop-header">Bag Size</th>
+                    <th class="desktop-header" onclick="sortTable('totalValue')">Value ($) <span id="sortIndicator">▲</span></th>
+                    <th class="desktop-header">% of Bag</th>
+                    <th class="desktop-header">Actions</th>
+                    <th class="mobile-header">Positions</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    </main>
+
+    <div id="coin-search-modal" class="modal">
+        <div class="modal-content"><div class="modaltop">
+            <h1>Search & Add Crypto Asset</h1>
+            <i class="exit-coin-search fa-solid fa-xmark"></i></div>
+            <input type="text" id="asset-search" placeholder="Search for crypto assets (e.g., Bitcoin, BTC)">
+            <div id="search-results" class="search-results-container">
+                <div class="search-help">Type to search for cryptocurrency assets</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="coin-modal" class="modal">
+        <div class="modal-content">
+            <h2>Add Coin to Portfolio</h2>
+            <input type="text" id="coin-code" placeholder="Enter Symbol (ex: BTC)" readonly>
+            <input type="text" id="coin-symbol" placeholder="Enter Coin Name (ex: Bitcoin)">
+            <input type="number" id="coin-quantity" placeholder="Enter Quantity" step="any">
+            <div class="modal-buttons">
+                <button id="save-coin-btn">Add to Portfolio</button>
+                <button class="exit-coin-modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="modal">
+        <div class="modal-content"><div class="modaltop">
+            <h1>Settings</h1>
+            <i class="exit-settings fa-solid fa-xmark"></i></div>
+          <div id="settings" class="Settings">
+                <label class="label1"><a href="https://app.currencyapi.com/register" target="_blank">Currency API</a> Key:</label>
+        <div class="APISettings">
+        <input type="password" id="currency-api-key" placeholder="Enter Currency API Key">
+        <button id="save-currency-api-key">Set Key</button></div>
+        <p style="font-size: 12px; color: #666; margin-top: 5px;">Required for non-USD portfolio display currencies</p>
+
+        <div class="LangSettings">
+        <label class="label1">Preferred Currency:</label>
+        <select id="preferred-currency">
+        </select>
+    </div>
+    
+        </div>
+    </div>
+
+    <script src="currencies.js"></script>
+    <script src="ui-enhancements.js"></script>
+    <script src="script.js"></script>
+    <script src="pagination.js"></script>
+    
+    </div></div>
+    
+    <footer>
+        <div class="footer-container">
+            <hr class="footer-divider">
+            <div class="footer-content">
+                <h3>Privacy Notice</h3>
+                <p>Sovereign Bag is a simple privacy-preserving portfolio tracker that:</p>
+                <ul>
+                    <li>Stores encrypted data locally in your browser</li>
+                    <li>Never tracks you with cookies or analytics</li>
+                    <li>Prevents Coingecko from knowing what exact coins you are actually looking at.</li>
+                    <li>Uses your own API keys for all external calls for live currency rates.</li>
+                </ul>
+                <div class="footer-links">
+                    <p>Data provided by:</p>
+                    <a href="https://www.coingecko.com/" target="_blank">CoinGecko</a> • 
+                    <a href="https://app.currencyapi.com/register" target="_blank">CurrencyAPI</a>
+                </div>
+                <p class="footer-copyright">© 2025 Sovereign Bags - Your keys, your coins, your privacy</p>
+            </div>
+        </div>
+    </footer>
+
+<script>
+  // Only register service worker on http/https, not file:// protocol
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('/service-worker.js')
+    .then(registration => {
+      console.log('Service Worker registered with scope:', registration.scope);
+    }).catch(error => {
+      console.log('Service Worker registration failed:', error);
+    });
+  } else if (location.protocol === 'file:') {
+    console.log('Service Worker skipped - running locally via file:// protocol');
+  }
+</script>
+
+
+
+</body>
+</html>

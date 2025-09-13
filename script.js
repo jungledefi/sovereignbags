@@ -910,55 +910,33 @@ $('#add-coin-btn').click(() => {
     $('#coin-search-modal').show();
 });
 
-// Manual refresh button (portfolio prices only)
-$('#refresh-btn').click(() => {
+// Cache refresh button (refresh cached coins list and update portfolio)
+$('#refresh-cache-btn').click(() => {
     if (refreshInProgress) {
         console.log('🔄 Refresh already in progress, please wait...');
         return;
     }
     
     const refreshStartTime = Date.now();
-    console.log('🔄 Manual portfolio refresh triggered by user...');
-    refreshInProgress = true;
-    
-    // Add visual feedback
-    $('#refresh-btn').addClass('fa-spin');
-    
-    refreshPrices().then(() => {
-        const refreshDuration = Date.now() - refreshStartTime;
-        console.log(`✅ Portfolio refresh completed successfully in ${refreshDuration}ms`);
-    }).catch(error => {
-        console.error('❌ Portfolio refresh failed:', error);
-        alert('Failed to refresh portfolio data. Please check your internet connection and try again.');
-    }).finally(() => {
-        refreshInProgress = false;
-        $('#refresh-btn').removeClass('fa-spin');
-    });
-});
-
-// Cache refresh button (refresh cached coins list)
-$('#refresh-cache-btn').click(() => {
-    if (refreshInProgress) {
-        console.log('🔄 Cache refresh already in progress, please wait...');
-        return;
-    }
-    
-    const refreshStartTime = Date.now();
     const cacheLimit = getCacheLimit();
-    console.log(`🔄 Cache refresh triggered by user - fetching ${cacheLimit} coins...`);
+    console.log(`🔄 Cache refresh and portfolio update triggered by user - fetching ${cacheLimit} coins...`);
     refreshInProgress = true;
     
     // Add visual feedback
     $('#refresh-cache-btn').addClass('fa-spin');
     
-    // Force refresh the coin cache
+    // Force refresh the coin cache, then update portfolio
     fetchAvailableAssets().then(() => {
+        console.log(`📊 Cache updated: ${getAvailableAssets().length} coins available`);
+        console.log('🔄 Now updating portfolio prices...');
+        // Also refresh portfolio prices after cache update
+        return refreshPrices();
+    }).then(() => {
         const refreshDuration = Date.now() - refreshStartTime;
-        console.log(`✅ Cache refresh completed successfully in ${refreshDuration}ms`);
-        console.log(`📊 Updated cache: ${getAvailableAssets().length} coins available`);
+        console.log(`✅ Cache refresh and portfolio update completed successfully in ${refreshDuration}ms`);
     }).catch(error => {
-        console.error('❌ Cache refresh failed:', error);
-        alert('Failed to refresh coin cache. Please check your internet connection and try again.');
+        console.error('❌ Cache refresh or portfolio update failed:', error);
+        alert('Failed to refresh data. Please check your internet connection and try again.');
     }).finally(() => {
         refreshInProgress = false;
         $('#refresh-cache-btn').removeClass('fa-spin');

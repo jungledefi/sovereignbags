@@ -118,11 +118,7 @@ function fetchCoinDataFromCoinGecko(assetSymbol, quoteCurrency = 'USD') {
         },
         dataType: 'json',
         error: function(xhr, status, error) {
-            if (xhr.status === 0) {
-                console.error('CORS error - Cannot access CoinGecko API from file:// protocol. Please use a web server.');
-            } else if (xhr.status === 429) {
-                console.error('Rate limit exceeded. Please wait before making more requests.');
-            }
+            // Handle errors silently
         }
     }).then(response => {
         const coinData = response[coinId];
@@ -210,30 +206,95 @@ function getCoinGeckoId(symbol) {
 
 // Function to fetch complete CoinGecko token list (all supported tokens)
 async function fetchAllCoinGeckoTokens() {
+    // Check if we already have tokens in localStorage
+    const cachedTokens = localStorage.getItem('allCoinGeckoTokens');
+    if (cachedTokens) {
+        try {
+            const tokens = JSON.parse(cachedTokens);
+            if (Array.isArray(tokens) && tokens.length > 0) {
+                return tokens; // Return cached data without API call
+            }
+        } catch (error) {
+            // If parsing fails, proceed with API call
+        }
+    }
     
     const apiUrl = 'https://api.coingecko.com/api/v3/coins/list';
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`;
     
     try {
-        const response = await $.ajax({
-            url: proxyUrl,
+        // Try direct fetch first (works when served from web server)
+        const response = await fetch(apiUrl, {
             method: 'GET',
-            dataType: 'json',
-            timeout: 20000
+            headers: {
+                'Accept': 'application/json',
+            }
         });
         
-        const allTokens = JSON.parse(response.contents);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const allTokens = await response.json();
+        
+        // Validate that we got an array of tokens
+        if (!Array.isArray(allTokens)) {
+            throw new Error('Invalid response format: expected array of tokens');
+        }
         
         // Store in localStorage with timestamp
         localStorage.setItem('allCoinGeckoTokens', JSON.stringify(allTokens));
         localStorage.setItem('allTokensLastFetched', Date.now().toString());
         
         return allTokens;
-    } catch (error) {
-        console.error('❌ Failed to fetch CoinGecko token list:', error);
-        // Try to return cached data if available
-        const cached = localStorage.getItem('allCoinGeckoTokens');
-        return cached ? JSON.parse(cached) : [];
+    } catch (directError) {
+        // If direct fetch fails (CORS), try proxy as fallback
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`;
+        
+        try {
+            const response = await $.ajax({
+                url: proxyUrl,
+                method: 'GET',
+                dataType: 'json',
+                timeout: 20000
+            });
+            
+            const responseData = JSON.parse(response.contents);
+            
+            // Check if the response is an error from CoinGecko API
+            if (responseData.status && responseData.status.error_code) {
+                throw new Error(`CoinGecko API Error: ${responseData.status.error_message}`);
+            }
+            
+            // Validate that we got an array of tokens
+            if (!Array.isArray(responseData)) {
+                throw new Error('Invalid response format: expected array of tokens');
+            }
+            
+            const allTokens = responseData;
+            
+            // Store in localStorage with timestamp
+            localStorage.setItem('allCoinGeckoTokens', JSON.stringify(allTokens));
+            localStorage.setItem('allTokensLastFetched', Date.now().toString());
+            
+            return allTokens;
+        } catch (proxyError) {
+            // Clear the bad data from localStorage if it exists
+            const badData = localStorage.getItem('allCoinGeckoTokens');
+            if (badData) {
+                try {
+                    const parsed = JSON.parse(badData);
+                    if (parsed.status && parsed.status.error_code) {
+                        localStorage.removeItem('allCoinGeckoTokens');
+                        localStorage.removeItem('allTokensLastFetched');
+                    }
+                } catch (e) {
+                    // Ignore parsing errors here
+                }
+            }
+            
+            // Return empty array if no valid cache available
+            return [];
+        }
     }
 }
 
@@ -311,7 +372,6 @@ async function fetchMarketDataWithSpoofing() {
         
         return userMarketData;
     } catch (error) {
-        console.error('❌ Failed to fetch market data:', error);
         return [];
     }
 }
@@ -350,9 +410,7 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
                 dataType: 'json',
                 timeout: 15000, // Increased timeout for proxy
                 error: function(xhr, status, error) {
-                    if (xhr.status === 0) {
-                        console.error('CORS error - API blocked. Please use a web server or browser extension.');
-                    }
+                    // Handle errors silently
                 }
             });
             
@@ -406,12 +464,6 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
             
             // Check if it's a CORS error (status 0)
             if (error.status === 0) {
-                console.error(`🔴 CORS Error on page ${page}: Cannot access CoinGecko API directly from file:// protocol`);
-                console.error(`💡 Solution: Run a local web server instead:`);
-                console.error(`   1. Open terminal in this directory`);
-                console.error(`   2. Run: python3 -m http.server 8000`);
-                console.error(`   3. Open: http://localhost:8000`);
-                
                 // If we have some cached data, use it
                 const existingCache = getAvailableAssets();
                 if (existingCache.length > 0) {
@@ -421,12 +473,6 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
                 // Stop trying if CORS error
                 break;
             }
-            
-            console.error(`💥 Failed to fetch page ${page} (failure #${consecutiveFailures}):`, {
-                status: error.status,
-                statusText: error.statusText,
-                message: error.message
-            });
             
             // Don't need to increase delays - we're already respecting rate limits
             
@@ -445,9 +491,7 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
                         dataType: 'json',
                         timeout: 15000,
                         error: function(xhr, status, error) {
-                            if (xhr.status === 0) {
-                                console.error('CORS error - API blocked. Please use a web server.');
-                            }
+                            // Handle errors silently
                         }
                     });
                     
@@ -477,7 +521,6 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
                     
                     
                 } catch (retryError) {
-                    console.error(`💥 Retry of page ${page} also failed:`, retryError.message);
                     
                     // Allow more retries specifically for pages beyond 500 coins
                     const maxRetries = page <= 5 ? 2 : 5; // More retries for higher pages
@@ -717,13 +760,11 @@ function getHoldings(password) {
         try {
             return decryptData(encryptedData, actualPassword);
         } catch (e) {
-            console.error('Failed to decrypt data', e);
             // Try with different password if first attempt fails
             if (!password) {
                 try {
                     return decryptData(encryptedData, 'fallback');
                 } catch (e2) {
-                    console.error('Failed to decrypt with fallback password, returning empty array', e2);
                     return [];
                 }
             }
@@ -791,21 +832,11 @@ function loadCurrencyOptions() {
 
 // Enhanced error logging for debugging
 window.addEventListener('error', (event) => {
-    console.error('💥 Global JavaScript Error:', {
-        message: event.message,
-        filename: event.filename,
-        lineno: event.lineno,
-        colno: event.colno,
-        error: event.error,
-        stack: event.error ? event.error.stack : null
-    });
+    // Handle errors silently
 });
 
 window.addEventListener('unhandledrejection', (event) => {
-    console.error('💥 Unhandled Promise Rejection:', {
-        reason: event.reason,
-        promise: event.promise
-    });
+    // Handle errors silently
 });
 
 
@@ -855,7 +886,7 @@ $(document).ready(() => {
         // Now refresh portfolio prices with the new privacy-preserving approach
         return refreshPrices();
     }).catch(error => {
-        console.error('Failed to initialize:', error);
+        // Handle initialization errors silently
     });
 
     // Fetch and update currency rates if more than 12 hours have passed since the last fetch
@@ -865,7 +896,6 @@ $(document).ready(() => {
             saveLastFetchTimestamp(Date.now());
             updateTable();
         }).fail(() => {
-            console.error('Failed to fetch currency rates');
             updateTable(); // Use cached rates if the fetch fails
         });
     } else {
@@ -889,7 +919,7 @@ $('#save-currency-api-key').click(() => {
             saveLastFetchTimestamp(Date.now());
             updateTable();
         }).fail(() => {
-            console.error('Failed to fetch currency rates');
+            // Handle currency rate fetch errors silently
         });
     }
 });
@@ -923,7 +953,6 @@ $('#save-cache-limit').click(() => {
         fetchAvailableAssets().then(() => {
             $button.text(originalText).prop('disabled', false);
         }).catch(error => {
-            console.error('❌ Failed to reload assets with new cache limit:', error);
             $button.text(originalText).prop('disabled', false);
         });
     } else {
@@ -963,7 +992,6 @@ $('#refresh-cache-btn').click(async () => {
         // Refresh portfolio prices with spoofing
         await refreshPrices();
     } catch (error) {
-        console.error('Failed to refresh:', error);
         alert('Failed to refresh data. Please check your internet connection.');
     } finally {
         refreshInProgress = false;
@@ -1008,19 +1036,29 @@ function displaySearchResults(assets) {
         return;
     }
     
-    assets.forEach(asset => {
-        // Display format: id | symbol | name (all from coins/list API)
-        const resultItem = `
-            <div class="search-result-item" data-asset-id="${asset.id}" data-asset-symbol="${asset.symbol}" data-asset-name="${asset.name}">
-                <div class="coin-info">
-                    <span class="coin-id">${asset.id}</span>
-                    <span class="coin-symbol">${asset.symbol.toUpperCase()}</span>
-                    <span class="coin-name">${asset.name}</span>
-                </div>
-            </div>
-        `;
-        container.append(resultItem);
-    });
+    // Create table structure
+    const tableHtml = `
+        <table class="search-results-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Symbol</th>
+                    <th>ID</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${assets.map(asset => `
+                    <tr class="search-result-item" data-asset-id="${asset.id}" data-asset-symbol="${asset.symbol}" data-asset-name="${asset.name}">
+                        <td>${asset.name}</td>
+                        <td>${asset.symbol.toUpperCase()}</td>
+                        <td>${asset.id}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+    
+    container.append(tableHtml);
 }
 
 // Handle asset selection from search results
@@ -1029,8 +1067,8 @@ $(document).on('click', '.search-result-item', function() {
     const assetSymbol = $(this).data('asset-symbol');
     const assetName = $(this).data('asset-name');
     
-    // Store the selected asset for adding to portfolio
-    $(this).data('selected-asset', { id: assetId, symbol: assetSymbol, name: assetName });
+    // Store the selected asset globally for the save function to access
+    window.selectedAsset = { id: assetId, symbol: assetSymbol, name: assetName };
     
     // Pre-fill the add coin modal with selected asset
     $('#coin-code').val(assetSymbol.toUpperCase());
@@ -1050,34 +1088,42 @@ $('#save-coin-btn').click(async () => {
     const currentHoldings = getHoldings();
 
     if (code && name && qty && qty > 0) {
-        // Find the token in our complete list
-        const allTokens = getAllCoinGeckoTokens();
-        const token = allTokens.find(t => 
-            t.symbol.toUpperCase() === code || 
-            t.id === code.toLowerCase()
-        );
+        let token = null;
         
-        if (!token) {
+        // Use selected asset if available (from search results)
+        if (window.selectedAsset && window.selectedAsset.id) {
+            token = { id: window.selectedAsset.id, symbol: window.selectedAsset.symbol, name: window.selectedAsset.name };
+        } else {
+            // Fallback: Find the token in our complete list
+            const allTokens = getAllCoinGeckoTokens();
+            token = allTokens.find(t => 
+                t.symbol.toUpperCase() === code || 
+                t.id === code.toLowerCase()
+            );
+        }
+        
+        if (!token || !token.id) {
             alert('Asset not found. Please select from the search results.');
             return;
         }
         
-        // Check if already exists in holdings
-        const existing = currentHoldings.find(c => c.code === code);
+        // Check if already exists in holdings (use CoinGecko ID as primary identifier)
+        const existing = currentHoldings.find(c => c.coinGeckoId === token.id);
         
         if (existing) {
             // Update existing holding
             existing.quantity = qty;
             existing.name = name;
-            existing.coinGeckoId = token.id;
+            existing.code = code; // Keep symbol for display
+            existing.symbol = code;
         } else {
-            // Add new holding with CoinGecko ID
+            // Add new holding with CoinGecko ID as primary identifier
             currentHoldings.push({ 
-                code: code,
-                symbol: code,
+                coinGeckoId: token.id, // Primary identifier
+                code: code, // Symbol for display
+                symbol: code, // Symbol for display
                 quantity: qty,
                 name: name,
-                coinGeckoId: token.id,
                 rate: 0,
                 quote_asset: 'USD',
                 icon_url: '',
@@ -1088,11 +1134,13 @@ $('#save-coin-btn').click(async () => {
         // Save holdings
         saveHoldings(currentHoldings, apiKey);
         
-        // Clear form
+        
+        // Clear form and selected asset
         $('#coin-code').val('');
         $('#coin-symbol').val('');
         $('#coin-quantity').val('');
         $('#coin-modal').hide();
+        window.selectedAsset = null; // Clear the selected asset
         
         // Refresh prices to get latest data for new/updated holding
         await refreshPrices();
@@ -1148,8 +1196,8 @@ function updateTable(sortBy = null, sortOrder = null) {
             <td><div class="right">${formatCurrency(total, preferredCurrency)}</div></td>
             <td><div class="right">${formatPercentage(allocation)}</div></td>
             <td><div class="right"><div class="rowoptions">
-                <i class="edit-btn fa-regular fa-pen-to-square" data-code="${holding.code}"></i>
-                <i class="delete-btn fa-solid fa-trash" data-code="${holding.code}"></i>
+                <i class="edit-btn fa-regular fa-pen-to-square" data-coingecko-id="${holding.coinGeckoId}"></i>
+                <i class="delete-btn fa-solid fa-trash" data-coingecko-id="${holding.coinGeckoId}"></i>
             </div></div></td>
         </tr>`;
         tbody.append(row);
@@ -1163,20 +1211,21 @@ function updateTable(sortBy = null, sortOrder = null) {
 
     // Event listener handling for buttons
     $('.edit-btn').click(function() {
-        const code = $(this).data('code');
-        const holding = holdings.find(c => c.code === code);
+        const coinGeckoId = $(this).data('coingecko-id');
+        const holding = holdings.find(c => c.coinGeckoId === coinGeckoId);
         if (holding) {
-            $('#coin-code').val(code);
-            $('#coin-symbol').val(holding.symbol);
+            // Store the selected asset for editing
+            window.selectedAsset = { id: holding.coinGeckoId, symbol: holding.symbol, name: holding.name };
+            $('#coin-code').val(holding.code);
+            $('#coin-symbol').val(holding.name);
             $('#coin-quantity').val(holding.quantity);
             $('#coin-modal').show();
-            // updateRatePreview(); // Removed as per edit hint
         }
     });
 
     $('.delete-btn').click(function() {
-        const code = $(this).data('code');
-        const updatedHoldings = holdings.filter(c => c.code !== code);
+        const coinGeckoId = $(this).data('coingecko-id');
+        const updatedHoldings = holdings.filter(c => c.coinGeckoId !== coinGeckoId);
         saveHoldings(updatedHoldings, 'fallback'); // Assuming 'fallback' is the default password
         updateTable(sortBy, sortOrder);
     });
@@ -1203,15 +1252,18 @@ async function refreshPrices() {
         // Use stored coinGeckoId if available, otherwise try to find by symbol
         if (holding.coinGeckoId) {
             userAssetIds.push(holding.coinGeckoId);
-            holdingToTokenMap[holding.code] = holding.coinGeckoId;
+            holdingToTokenMap[holding.coinGeckoId] = holding.coinGeckoId; // Map ID to ID
         } else {
+            // For legacy holdings without coinGeckoId, try to find by symbol and update the holding
             const token = allTokens.find(t => 
                 t.symbol.toLowerCase() === holding.code.toLowerCase() ||
                 t.symbol.toLowerCase() === holding.symbol?.toLowerCase()
             );
             if (token) {
                 userAssetIds.push(token.id);
-                holdingToTokenMap[holding.code] = token.id;
+                holdingToTokenMap[token.id] = token.id; // Map ID to ID
+                // Update the holding with the found coinGeckoId for future use
+                holding.coinGeckoId = token.id;
             }
         }
     });
@@ -1232,21 +1284,66 @@ async function refreshPrices() {
         ids: idsParam
     });
     const fullUrl = `${apiUrl}?${params}`;
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}`;
+    
+    let marketData = [];
     
     try {
-        const response = await $.ajax({
-            url: proxyUrl,
+        // Try direct fetch first (works when served from web server)
+        const response = await fetch(fullUrl, {
             method: 'GET',
-            dataType: 'json',
-            timeout: 20000
+            headers: {
+                'Accept': 'application/json',
+            }
         });
         
-        const marketData = JSON.parse(response.contents);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        marketData = await response.json();
+        
+        // Validate that we got an array
+        if (!Array.isArray(marketData)) {
+            throw new Error('Invalid response format: expected array of market data');
+        }
+        
+    } catch (directError) {
+        // If direct fetch fails (CORS), try proxy as fallback
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}`;
+        
+        try {
+            const response = await $.ajax({
+                url: proxyUrl,
+                method: 'GET',
+                dataType: 'json',
+                timeout: 20000
+            });
+            
+            const responseData = JSON.parse(response.contents);
+            
+            // Check if the response is an error from CoinGecko API
+            if (responseData.status && responseData.status.error_code) {
+                throw new Error(`CoinGecko API Error: ${responseData.status.error_message}`);
+            }
+            
+            // Validate that we got an array
+            if (!Array.isArray(responseData)) {
+                throw new Error('Invalid response format: expected array of market data');
+            }
+            
+            marketData = responseData;
+            
+        } catch (proxyError) {
+            throw proxyError;
+        }
+    }
+    
+    try {
         
         // Update holdings with fresh market data
         const updatedHoldings = holdings.map(holding => {
-            const tokenId = holdingToTokenMap[holding.code];
+            // Use coinGeckoId directly to find market data
+            const tokenId = holding.coinGeckoId;
             if (tokenId) {
                 const coinData = marketData.find(m => m.id === tokenId);
                 if (coinData) {
@@ -1273,7 +1370,6 @@ async function refreshPrices() {
         updateTable(sortBy, sortOrder);
         
     } catch (error) {
-        console.error('Failed to refresh prices:', error);
         alert('Failed to refresh prices. Please check your internet connection.');
     }
     
@@ -1365,12 +1461,10 @@ $(document).ready(function() {
                 if (response.status === 'success') {
                     allData = response.data.sort((a, b) => b.tvlUsd - a.tvlUsd);
                     filterAndDisplayData();
-                } else {
-                    console.error("Error fetching data:", response);
                 }
             },
             error: function(err) {
-                console.error("AJAX error:", err);
+                // Handle errors silently
             }
         });
     }

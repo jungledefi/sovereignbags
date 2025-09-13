@@ -227,19 +227,24 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
         try {
             console.log(`📄 Fetching page ${page}/${pagesNeeded} (coins ${((page-1)*250)+1}-${Math.min(page*250, cacheLimit)})...`);
             
+            // Use CORS proxy for GitHub Pages deployment
+            const apiUrl = 'https://api.coingecko.com/api/v3/coins/markets';
+            const params = new URLSearchParams({
+                vs_currency: 'usd',
+                order: 'market_cap_desc',
+                per_page: 250,
+                page: page,
+                sparkline: false,
+                price_change_percentage: '24h'
+            });
+            const fullUrl = `${apiUrl}?${params}`;
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}`;
+            
             const response = await $.ajax({
-                url: 'https://api.coingecko.com/api/v3/coins/markets',
+                url: proxyUrl,
                 method: 'GET',
-                data: {
-                    vs_currency: 'usd',
-                    order: 'market_cap_desc',
-                    per_page: 250,
-                    page: page,
-                    sparkline: false,
-                    price_change_percentage: '24h'
-                },
                 dataType: 'json',
-                timeout: 10000, // 10 second timeout per request
+                timeout: 15000, // Increased timeout for proxy
                 error: function(xhr, status, error) {
                     if (xhr.status === 0) {
                         console.error('CORS error - API blocked. Please use a web server or browser extension.');
@@ -247,9 +252,12 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
                 }
             });
             
+            // Parse the response from the CORS proxy
+            const coinData = JSON.parse(response.contents);
+            
             // Process this page's coins
             let coinsAddedFromPage = 0;
-            response.forEach((coin, coinIndex) => {
+            coinData.forEach((coin, coinIndex) => {
                 const rank = ((page - 1) * 250) + coinIndex + 1;
                 
                 // Stop when we reach the cache limit
@@ -333,17 +341,10 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
                 
                 try {
                     console.log(`🔄 Retrying page ${page}...`);
+                    const retryProxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}`;
                     const retryResponse = await $.ajax({
-                        url: 'https://api.coingecko.com/api/v3/coins/markets',
+                        url: retryProxyUrl,
                         method: 'GET',
-                        data: {
-                            vs_currency: 'usd',
-                            order: 'market_cap_desc',
-                            per_page: 250,
-                            page: page,
-                            sparkline: false,
-                            price_change_percentage: '24h'
-                        },
                         dataType: 'json',
                         timeout: 15000,
                         error: function(xhr, status, error) {
@@ -354,8 +355,9 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
                     });
                     
                     // Process retry response same as above
+                    const retryCoinData = JSON.parse(retryResponse.contents);
                     let coinsAddedFromPage = 0;
-                    retryResponse.forEach((coin, coinIndex) => {
+                    retryCoinData.forEach((coin, coinIndex) => {
                         if (allCryptos.length >= cacheLimit) return;
                         const rank = ((page - 1) * 250) + coinIndex + 1;
                         allCryptos.push({
@@ -451,20 +453,26 @@ function fetchTop100FromCoinGecko() {
     const cacheLimit = getCacheLimit();
     const perPage = Math.min(cacheLimit, 100); // Max 100 per page for fallback
     
+    // Use CORS proxy for fallback as well
+    const apiUrl = 'https://api.coingecko.com/api/v3/coins/markets';
+    const params = new URLSearchParams({
+        vs_currency: 'usd',
+        order: 'market_cap_desc',
+        per_page: perPage,
+        page: 1,
+        sparkline: false,
+        price_change_percentage: '24h'
+    });
+    const fullUrl = `${apiUrl}?${params}`;
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}`;
+    
     return $.ajax({
-        url: 'https://api.coingecko.com/api/v3/coins/markets',
+        url: proxyUrl,
         method: 'GET',
-        data: {
-            vs_currency: 'usd',
-            order: 'market_cap_desc',
-            per_page: perPage,
-            page: 1,
-            sparkline: false,
-            price_change_percentage: '24h'
-        },
         dataType: 'json'
     }).then(response => {
-        const cryptoAssets = response.map((coin, index) => ({
+        const coinData = JSON.parse(response.contents);
+        const cryptoAssets = coinData.map((coin, index) => ({
             asset_id: coin.symbol.toUpperCase(),
             name: coin.name,
             symbol: coin.symbol.toUpperCase(),

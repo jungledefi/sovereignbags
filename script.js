@@ -2,7 +2,7 @@
 
 // Function to update cached asset count display
 function updateCachedAssetCount() {
-    const assets = getAvailableAssets();
+    const assets = getAllCoinGeckoTokens();
     const count = assets ? assets.length : 0;
     
     $('#asset-count').text(count);
@@ -10,12 +10,11 @@ function updateCachedAssetCount() {
     // Add visual feedback based on absolute count
     $('#cached-count').removeClass('cached-full cached-partial');
     
-    if (count >= 1500) {
+    if (count >= 10000) {
         $('#cached-count').addClass('cached-full');
-    } else if (count >= 500) {
+    } else if (count >= 5000) {
         $('#cached-count').addClass('cached-partial');
     }
-    
 }
 
 // Function to get the CoinMarketCap API key from localStorage (kept for legacy data decryption only)
@@ -850,28 +849,14 @@ $(document).ready(() => {
         $('#currency-api-key').val(currencyApiKey);
     }
 
-    // Check if we need to fetch assets or if cached data is available
-    const cachedAssets = getAvailableAssets();
-    const cacheTimestamp = localStorage.getItem('assetsLastFetched');
-    const oneHourAgo = Date.now() - (60 * 60 * 1000); // 1 hour cache
-    const savedCacheLimit = getCacheLimit();
-    
-    if (cachedAssets.length === 0 || !cacheTimestamp || parseInt(cacheTimestamp) < oneHourAgo) {
-        
-        fetchAvailableAssets().then(() => {
-            // Update the cached asset count display
-            updateCachedAssetCount();
-        }).catch(error => {
-            console.error('❌ Failed to load available assets:', error);
-            // Try to use any existing cached data as fallback
-            if (cachedAssets.length > 0) {
-                updateCachedAssetCount();
-            }
-        });
-    } else {
-        const cacheAge = Math.round((Date.now() - parseInt(cacheTimestamp)) / (60 * 1000));
+    // On page load: fetch coin list, then fetch market data with spoofing
+    fetchAllCoinGeckoTokens().then(() => {
         updateCachedAssetCount();
-    }
+        // Now refresh portfolio prices with the new privacy-preserving approach
+        return refreshPrices();
+    }).catch(error => {
+        console.error('Failed to initialize:', error);
+    });
 
     // Fetch and update currency rates if more than 12 hours have passed since the last fetch
     if (shouldFetchRates()) {
@@ -959,32 +944,31 @@ $('#add-coin-btn').click(() => {
     $('#coin-search-modal').show();
 });
 
-// Cache refresh button (refresh cached coins list and update portfolio)
-$('#refresh-cache-btn').click(() => {
+// Cache refresh button (refresh coin list and portfolio with privacy spoofing)
+$('#refresh-cache-btn').click(async () => {
     if (refreshInProgress) {
         return;
     }
     
-    const refreshStartTime = Date.now();
-    const cacheLimit = getCacheLimit();
     refreshInProgress = true;
     
     // Add visual feedback
     $('#refresh-cache-btn').addClass('fa-spin');
     
-    // Force refresh the coin cache, then update portfolio
-    fetchAvailableAssets().then(() => {
-        // Also refresh portfolio prices after cache update
-        return refreshPrices();
-    }).then(() => {
-        const refreshDuration = Date.now() - refreshStartTime;
-    }).catch(error => {
-        console.error('❌ Cache refresh or portfolio update failed:', error);
-        alert('Failed to refresh data. Please check your internet connection and try again.');
-    }).finally(() => {
+    try {
+        // Force refresh the complete coin list
+        await fetchAllCoinGeckoTokens();
+        updateCachedAssetCount();
+        
+        // Refresh portfolio prices with spoofing
+        await refreshPrices();
+    } catch (error) {
+        console.error('Failed to refresh:', error);
+        alert('Failed to refresh data. Please check your internet connection.');
+    } finally {
         refreshInProgress = false;
         $('#refresh-cache-btn').removeClass('fa-spin');
-    });
+    }
 });
 
 // Hide modal
@@ -1025,12 +1009,13 @@ function displaySearchResults(assets) {
     }
     
     assets.forEach(asset => {
+        // Display format: id | symbol | name (all from coins/list API)
         const resultItem = `
-            <div class="search-result-item" data-asset-id="${asset.symbol}" data-asset-name="${asset.name}">
-                <img src="${asset.icon_url || ''}" alt="${asset.symbol}" style="display: ${asset.icon_url ? 'block' : 'none'}">
+            <div class="search-result-item" data-asset-id="${asset.id}" data-asset-symbol="${asset.symbol}" data-asset-name="${asset.name}">
                 <div class="coin-info">
+                    <span class="coin-id">${asset.id}</span>
+                    <span class="coin-symbol">${asset.symbol.toUpperCase()}</span>
                     <span class="coin-name">${asset.name}</span>
-                    <span class="coin-symbol">${asset.symbol}</span>
                 </div>
             </div>
         `;
@@ -1040,11 +1025,15 @@ function displaySearchResults(assets) {
 
 // Handle asset selection from search results
 $(document).on('click', '.search-result-item', function() {
-    const assetSymbol = $(this).data('asset-id');
+    const assetId = $(this).data('asset-id');
+    const assetSymbol = $(this).data('asset-symbol');
     const assetName = $(this).data('asset-name');
     
+    // Store the selected asset for adding to portfolio
+    $(this).data('selected-asset', { id: assetId, symbol: assetSymbol, name: assetName });
+    
     // Pre-fill the add coin modal with selected asset
-    $('#coin-code').val(assetSymbol);
+    $('#coin-code').val(assetSymbol.toUpperCase());
     $('#coin-symbol').val(assetName);
     
     // Hide search modal and show add modal
@@ -1053,48 +1042,61 @@ $(document).on('click', '.search-result-item', function() {
 });
 
 // Add/Edit coin
-$('#save-coin-btn').click(() => {
+$('#save-coin-btn').click(async () => {
     const code = $('#coin-code').val().toUpperCase();
-    const symbol = $('#coin-symbol').val();
+    const name = $('#coin-symbol').val();
     const qty = parseFloat($('#coin-quantity').val());
     const apiKey = 'fallback';
     const currentHoldings = getHoldings();
 
-    if (code && symbol && qty && qty > 0) {
-        fetchCoinData(code).then(data => {
-            const existing = currentHoldings.find(c => c.code === code);
-            if (existing) {
-                existing.quantity = qty;
-                existing.symbol = symbol;
-                existing.rate = data.rate;
-                existing.quote_asset = 'USD';
-                existing.icon_url = data.icon_url || existing.icon_url;
-                existing.deltaday = data.deltaday;
-            } else {
-                currentHoldings.push({ 
-                    code, 
-                    symbol, 
-                    quantity: qty, 
-                    name: symbol,
-                    rate: data.rate,
-                    quote_asset: 'USD',
-                    icon_url: data.icon_url || '',
-                    deltaday: data.deltaday 
-                });
-            }
-            saveHoldings(currentHoldings, apiKey);
-            const sortBy = localStorage.getItem('sortBy') || 'totalValue';
-            const sortOrder = localStorage.getItem('sortOrder') || 'asc';
-            updateTable(sortBy, sortOrder);
-            $('#coin-code').val('');
-            $('#coin-symbol').val('');
-            $('#coin-quantity').val('');
-            $('#coin-modal').hide();
-            
-        }).catch(error => {
-            console.error('Failed to fetch coin data:', error);
-            alert('Failed to fetch coin data. Please check the asset symbol.');
-        });
+    if (code && name && qty && qty > 0) {
+        // Find the token in our complete list
+        const allTokens = getAllCoinGeckoTokens();
+        const token = allTokens.find(t => 
+            t.symbol.toUpperCase() === code || 
+            t.id === code.toLowerCase()
+        );
+        
+        if (!token) {
+            alert('Asset not found. Please select from the search results.');
+            return;
+        }
+        
+        // Check if already exists in holdings
+        const existing = currentHoldings.find(c => c.code === code);
+        
+        if (existing) {
+            // Update existing holding
+            existing.quantity = qty;
+            existing.name = name;
+            existing.coinGeckoId = token.id;
+        } else {
+            // Add new holding with CoinGecko ID
+            currentHoldings.push({ 
+                code: code,
+                symbol: code,
+                quantity: qty,
+                name: name,
+                coinGeckoId: token.id,
+                rate: 0,
+                quote_asset: 'USD',
+                icon_url: '',
+                deltaday: 1
+            });
+        }
+        
+        // Save holdings
+        saveHoldings(currentHoldings, apiKey);
+        
+        // Clear form
+        $('#coin-code').val('');
+        $('#coin-symbol').val('');
+        $('#coin-quantity').val('');
+        $('#coin-modal').hide();
+        
+        // Refresh prices to get latest data for new/updated holding
+        await refreshPrices();
+        
     } else {
         alert('Please enter valid coin symbol, name, and quantity.');
     }
@@ -1181,66 +1183,99 @@ function updateTable(sortBy = null, sortOrder = null) {
 }
 
 // Function to refresh all prices and update portfolio
-function refreshPrices() {
+async function refreshPrices() {
+    // First, ensure we have the latest coin list
+    await fetchAllCoinGeckoTokens();
+    const allTokens = getAllCoinGeckoTokens();
     
-    // Check if we have recent cached data (less than 5 minutes old)
-    const cachedAssets = getAvailableAssets();
-    const cacheTimestamp = localStorage.getItem('assetsLastFetched');
-    const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
-    
-    // If we have recent cached data, use it instead of making new API calls
-    if (cachedAssets.length > 0 && cacheTimestamp && parseInt(cacheTimestamp) > fiveMinutesAgo) {
-        const cacheAge = Math.round((Date.now() - parseInt(cacheTimestamp)) / 60000);
-        return updatePortfolioFromCache();
-    }
-    
-    // Only fetch fresh data if cache is stale or missing
-    return fetchAvailableAssets().then(() => {
-        return updatePortfolioFromCache();
-    }).catch(error => {
-        console.error('Failed to refresh prices:', error);
-        // If API fails but we have cached data, use it
-        if (cachedAssets.length > 0) {
-            return updatePortfolioFromCache();
-        } else {
-            alert('Failed to refresh prices. Please check your internet connection.');
-            throw error;
-        }
-    });
-}
-
-// Function to update portfolio using cached asset data
-function updatePortfolioFromCache() {
+    // Get current holdings
     const holdings = getHoldings();
     if (holdings.length === 0) {
         updateTable();
         return Promise.resolve();
     }
-
-    // Update each holding with fresh price data from cached assets
-    const assets = getAvailableAssets();
-    const updatedHoldings = holdings.map(holding => {
-        const asset = assets.find(a => a.symbol.toUpperCase() === holding.code.toUpperCase());
-        if (asset && asset.price) {
-            return {
-                ...holding,
-                rate: asset.price,
-                deltaday: 1 + (asset.percent_change_24h / 100),
-                quote_asset: 'USD',
-                last_updated: asset.last_updated
-            };
-        }
-        return holding; // Keep original if no update available
-    });
-
-    // Save updated holdings
-    const apiKey = 'fallback';
-    saveHoldings(updatedHoldings, apiKey);
     
-    // Update display
-    const sortBy = localStorage.getItem('sortBy') || 'totalValue';
-    const sortOrder = localStorage.getItem('sortOrder') || 'asc';
-    updateTable(sortBy, sortOrder);
+    // Map holdings to CoinGecko IDs
+    const userAssetIds = [];
+    const holdingToTokenMap = {};
+    
+    holdings.forEach(holding => {
+        // Use stored coinGeckoId if available, otherwise try to find by symbol
+        if (holding.coinGeckoId) {
+            userAssetIds.push(holding.coinGeckoId);
+            holdingToTokenMap[holding.code] = holding.coinGeckoId;
+        } else {
+            const token = allTokens.find(t => 
+                t.symbol.toLowerCase() === holding.code.toLowerCase() ||
+                t.symbol.toLowerCase() === holding.symbol?.toLowerCase()
+            );
+            if (token) {
+                userAssetIds.push(token.id);
+                holdingToTokenMap[holding.code] = token.id;
+            }
+        }
+    });
+    
+    if (userAssetIds.length === 0) {
+        updateTable();
+        return Promise.resolve();
+    }
+    
+    // Generate spoofed list with 150 random assets for privacy
+    const spoofedIds = generateSpoofAssetsList(userAssetIds, 150);
+    const idsParam = spoofedIds.join(',');
+    
+    // Fetch market data with spoofed list
+    const apiUrl = 'https://api.coingecko.com/api/v3/coins/markets';
+    const params = new URLSearchParams({
+        vs_currency: 'usd',
+        ids: idsParam
+    });
+    const fullUrl = `${apiUrl}?${params}`;
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}`;
+    
+    try {
+        const response = await $.ajax({
+            url: proxyUrl,
+            method: 'GET',
+            dataType: 'json',
+            timeout: 20000
+        });
+        
+        const marketData = JSON.parse(response.contents);
+        
+        // Update holdings with fresh market data
+        const updatedHoldings = holdings.map(holding => {
+            const tokenId = holdingToTokenMap[holding.code];
+            if (tokenId) {
+                const coinData = marketData.find(m => m.id === tokenId);
+                if (coinData) {
+                    return {
+                        ...holding,
+                        rate: coinData.current_price,
+                        deltaday: 1 + ((coinData.price_change_percentage_24h || 0) / 100),
+                        quote_asset: 'USD',
+                        icon_url: coinData.image,
+                        last_updated: coinData.last_updated
+                    };
+                }
+            }
+            return holding; // Keep original if no update available
+        });
+        
+        // Save updated holdings
+        const apiKey = 'fallback';
+        saveHoldings(updatedHoldings, apiKey);
+        
+        // Update display
+        const sortBy = localStorage.getItem('sortBy') || 'totalValue';
+        const sortOrder = localStorage.getItem('sortOrder') || 'asc';
+        updateTable(sortBy, sortOrder);
+        
+    } catch (error) {
+        console.error('Failed to refresh prices:', error);
+        alert('Failed to refresh prices. Please check your internet connection.');
+    }
     
     return Promise.resolve();
 }

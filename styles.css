@@ -726,9 +726,26 @@ select:focus {
 .search-result-item .coin-info {
     display: flex;
     align-items: baseline;
-    gap: var(--spacing-xs);
+    gap: var(--spacing-md);
     flex: 1;
     min-width: 0;
+}
+
+.search-result-item .coin-id {
+    font-size: 11px;
+    opacity: 0.6;
+    min-width: 120px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.search-result-item .coin-symbol {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    min-width: 60px;
+    color: var(--hover-text-color);
 }
 
 .search-result-item .coin-name {
@@ -736,14 +753,7 @@ select:focus {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-.search-result-item .coin-symbol {
-    font-size: 11px;
-    opacity: 0.7;
-    text-transform: uppercase;
-    font-weight: 600;
-    flex-shrink: 0;
+    flex: 1;
 }
 
 /* ============================================

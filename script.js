@@ -207,6 +207,125 @@ function getCoinGeckoId(symbol) {
     return symbolToIdMap[symbol.toUpperCase()] || symbol.toLowerCase();
 }
 
+// ============================================
+// NEW PRIVACY-PRESERVING COIN SYSTEM  
+// ============================================
+
+// Function to fetch complete CoinGecko token list (all supported tokens)
+async function fetchAllCoinGeckoTokens() {
+    console.log('🔄 Fetching complete CoinGecko token list...');
+    
+    const apiUrl = 'https://api.coingecko.com/api/v3/coins/list';
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`;
+    
+    try {
+        const response = await $.ajax({
+            url: proxyUrl,
+            method: 'GET',
+            dataType: 'json',
+            timeout: 20000
+        });
+        
+        const allTokens = JSON.parse(response.contents);
+        console.log(`✅ Fetched ${allTokens.length} tokens from CoinGecko`);
+        
+        // Store in localStorage with timestamp
+        localStorage.setItem('allCoinGeckoTokens', JSON.stringify(allTokens));
+        localStorage.setItem('allTokensLastFetched', Date.now().toString());
+        
+        return allTokens;
+    } catch (error) {
+        console.error('❌ Failed to fetch CoinGecko token list:', error);
+        // Try to return cached data if available
+        const cached = localStorage.getItem('allCoinGeckoTokens');
+        return cached ? JSON.parse(cached) : [];
+    }
+}
+
+// Function to get all tokens from localStorage
+function getAllCoinGeckoTokens() {
+    const tokens = localStorage.getItem('allCoinGeckoTokens');
+    return tokens ? JSON.parse(tokens) : [];
+}
+
+// Function to get user's desired assets (their actual portfolio)
+function getUserDesiredAssets() {
+    const assets = localStorage.getItem('userDesiredAssets');
+    return assets ? JSON.parse(assets) : [];
+}
+
+// Function to save user's desired assets  
+function saveUserDesiredAssets(assets) {
+    localStorage.setItem('userDesiredAssets', JSON.stringify(assets));
+}
+
+// Function to generate random spoof assets for privacy
+function generateSpoofAssetsList(userAssetIds, spoofCount = 150) {
+    const allTokens = getAllCoinGeckoTokens();
+    if (allTokens.length === 0) return userAssetIds;
+    
+    // Get random assets excluding user's actual assets
+    const availableForSpoof = allTokens.filter(token => !userAssetIds.includes(token.id));
+    const randomSpoofs = [];
+    
+    for (let i = 0; i < spoofCount && i < availableForSpoof.length; i++) {
+        const randomIndex = Math.floor(Math.random() * availableForSpoof.length);
+        const randomToken = availableForSpoof.splice(randomIndex, 1)[0];
+        randomSpoofs.push(randomToken.id);
+    }
+    
+    // Combine user assets with spoof assets and shuffle
+    const combinedIds = [...userAssetIds, ...randomSpoofs];
+    return combinedIds.sort(() => Math.random() - 0.5); // Shuffle array
+}
+
+// Function to fetch market data for user assets + spoofs
+async function fetchMarketDataWithSpoofing() {
+    const userAssets = getUserDesiredAssets();
+    const userAssetIds = userAssets.map(asset => asset.id);
+    
+    if (userAssetIds.length === 0) {
+        console.log('📝 No user assets to fetch prices for');
+        return [];
+    }
+    
+    // Generate spoofed request with user assets + random assets  
+    const spoofedIds = generateSpoofAssetsList(userAssetIds, 150);
+    const idsParam = spoofedIds.join(',');
+    
+    console.log(`🔄 Fetching market data for ${userAssetIds.length} user assets + ${spoofedIds.length - userAssetIds.length} spoof assets`);
+    console.log(`👤 User assets: ${userAssetIds.join(', ')}`);
+    
+    const apiUrl = 'https://api.coingecko.com/api/v3/coins/markets';
+    const params = new URLSearchParams({
+        vs_currency: 'usd',
+        ids: idsParam
+    });
+    const fullUrl = `${apiUrl}?${params}`;
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}`;
+    
+    try {
+        const response = await $.ajax({
+            url: proxyUrl,
+            method: 'GET',
+            dataType: 'json', 
+            timeout: 20000
+        });
+        
+        const marketData = JSON.parse(response.contents);
+        console.log(`✅ Fetched market data for ${marketData.length} assets`);
+        
+        // Filter to only return data for user's actual assets
+        const userMarketData = marketData.filter(coin => userAssetIds.includes(coin.id));
+        console.log(`🎯 Filtered to ${userMarketData.length} user assets`);
+        
+        return userMarketData;
+    } catch (error) {
+        console.error('❌ Failed to fetch market data:', error);
+        return [];
+    }
+}
+
 // Rate-limit compliant fetching with fallback strategy for CoinGecko free tier limits
 async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
     const allCryptos = [];
@@ -438,14 +557,17 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
 
 // Function to fetch top cryptocurrencies from CoinGecko based on cache limit setting
 function fetchAvailableAssets() {
-    const cacheLimit = getCacheLimit();
-    const pagesNeeded = Math.ceil(cacheLimit / 250); // CoinGecko returns up to 250 per page
+    const lastFetched = localStorage.getItem('allTokensLastFetched');
+    const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000); // 24 hours
     
-    console.log(`🎯 Fetching top ${cacheLimit} cryptocurrencies from CoinGecko (${pagesNeeded} pages @ 250 coins/page)...`);
-    
-    // Use efficient fetching with 250 coins per page (maximum allowed by CoinGecko)
-    console.log(`📡 Using efficient 250-coin-per-page fetching to minimize API calls...`);
-    return fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded);
+    // Check if we need to refresh the complete token list (once per day)
+    if (!lastFetched || parseInt(lastFetched) < oneDayAgo) {
+        console.log('🔄 Refreshing complete CoinGecko token list (daily update)...');
+        return fetchAllCoinGeckoTokens();
+    } else {
+        console.log('✅ Using cached CoinGecko token list');
+        return Promise.resolve(getAllCoinGeckoTokens());
+    }
 }
 
 // Fallback function to fetch coins from CoinGecko if pagination fails
@@ -498,8 +620,8 @@ function fetchTop100FromCoinGecko() {
 
 // Function to search assets by name or symbol (optimized for 500+ assets)
 function searchAssets(query) {
-    const assets = getAvailableAssets();
-    if (!query) return assets.slice(0, 30); // Return top 30 by rank if no query
+    const assets = getAllCoinGeckoTokens(); // Use complete token list
+    if (!query) return assets.slice(0, 30); // Return top 30 if no query
     
     const normalizedQuery = query.toLowerCase();
     
@@ -521,10 +643,8 @@ function searchAssets(query) {
             // Name contains query
             else if (name.includes(normalizedQuery)) score += 100;
             
-            // Boost score based on market cap rank (lower rank = higher priority)
-            if (score > 0) {
-                score += Math.max(0, 501 - asset.rank); // Higher ranked coins appear first
-            }
+            // Boost score for matches (no rank available in token list)
+            // Results will be naturally ordered by search relevance
             
             return { asset, score };
         })

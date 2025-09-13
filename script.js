@@ -16,7 +16,6 @@ function updateCachedAssetCount() {
         $('#cached-count').addClass('cached-partial');
     }
     
-    console.log(`📊 Cache status: ${count} coins available for search`);
 }
 
 // Function to get the CoinMarketCap API key from localStorage (kept for legacy data decryption only)
@@ -155,7 +154,6 @@ function fetchCoinDataFromCoinGecko(assetSymbol, quoteCurrency = 'USD') {
 // Helper function to map common symbols to CoinGecko IDs
 function getCoinGeckoId(symbol) {
     if (!symbol || typeof symbol !== 'string') {
-        console.warn('Invalid symbol provided to getCoinGeckoId:', symbol);
         return 'bitcoin'; // fallback
     }
     
@@ -213,7 +211,6 @@ function getCoinGeckoId(symbol) {
 
 // Function to fetch complete CoinGecko token list (all supported tokens)
 async function fetchAllCoinGeckoTokens() {
-    console.log('🔄 Fetching complete CoinGecko token list...');
     
     const apiUrl = 'https://api.coingecko.com/api/v3/coins/list';
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`;
@@ -227,7 +224,6 @@ async function fetchAllCoinGeckoTokens() {
         });
         
         const allTokens = JSON.parse(response.contents);
-        console.log(`✅ Fetched ${allTokens.length} tokens from CoinGecko`);
         
         // Store in localStorage with timestamp
         localStorage.setItem('allCoinGeckoTokens', JSON.stringify(allTokens));
@@ -285,7 +281,6 @@ async function fetchMarketDataWithSpoofing() {
     const userAssetIds = userAssets.map(asset => asset.id);
     
     if (userAssetIds.length === 0) {
-        console.log('📝 No user assets to fetch prices for');
         return [];
     }
     
@@ -293,8 +288,6 @@ async function fetchMarketDataWithSpoofing() {
     const spoofedIds = generateSpoofAssetsList(userAssetIds, 150);
     const idsParam = spoofedIds.join(',');
     
-    console.log(`🔄 Fetching market data for ${userAssetIds.length} user assets + ${spoofedIds.length - userAssetIds.length} spoof assets`);
-    console.log(`👤 User assets: ${userAssetIds.join(', ')}`);
     
     const apiUrl = 'https://api.coingecko.com/api/v3/coins/markets';
     const params = new URLSearchParams({
@@ -313,11 +306,9 @@ async function fetchMarketDataWithSpoofing() {
         });
         
         const marketData = JSON.parse(response.contents);
-        console.log(`✅ Fetched market data for ${marketData.length} assets`);
         
         // Filter to only return data for user's actual assets
         const userMarketData = marketData.filter(coin => userAssetIds.includes(coin.id));
-        console.log(`🎯 Filtered to ${userMarketData.length} user assets`);
         
         return userMarketData;
     } catch (error) {
@@ -332,19 +323,14 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
     const delayBetweenPages = 2500; // 2.5 seconds = well under 30 calls/minute limit
     let consecutiveFailures = 0;
     
-    console.log(`🎯 Efficient fetching: ${pagesNeeded} pages (250 coins/page), ${delayBetweenPages}ms delay (respects 30 calls/min limit)`);
-    console.log(`📊 Target: ${cacheLimit} coins (estimated time: ${Math.ceil(pagesNeeded * 2.5)} seconds)`);
     
     // Check if we've hit the 500-coin barrier before
     const savedAssets = getAvailableAssets();
     if (savedAssets.length >= 500 && cacheLimit > 500) {
-        console.log(`⚠️  Note: CoinGecko free tier typically limits access to ~500 coins (pages 1-5)`);
-        console.log(`🔄 Will attempt to fetch beyond 500 coins but may hit API restrictions...`);
     }
     
     for (let page = 1; page <= pagesNeeded; page++) {
         try {
-            console.log(`📄 Fetching page ${page}/${pagesNeeded} (coins ${((page-1)*250)+1}-${Math.min(page*250, cacheLimit)})...`);
             
             // Use CORS proxy for GitHub Pages deployment
             const apiUrl = 'https://api.coingecko.com/api/v3/coins/markets';
@@ -402,20 +388,17 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
                 coinsAddedFromPage++;
             });
             
-            console.log(`✅ Page ${page} complete: +${coinsAddedFromPage} coins (total: ${allCryptos.length}/${cacheLimit})`);
             
             // Reset consecutive failures on success
             consecutiveFailures = 0;
             
             // Stop early if we've reached our target
             if (allCryptos.length >= cacheLimit) {
-                console.log(`🎯 Target reached! Got ${allCryptos.length} coins (wanted ${cacheLimit})`);
                 break;
             }
             
             // Delay before next page (except for the last page)
             if (page < pagesNeeded && allCryptos.length < cacheLimit) {
-                console.log(`⏳ Waiting ${delayBetweenPages}ms before next page...`);
                 await new Promise(resolve => setTimeout(resolve, delayBetweenPages));
             }
             
@@ -433,7 +416,6 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
                 // If we have some cached data, use it
                 const existingCache = getAvailableAssets();
                 if (existingCache.length > 0) {
-                    console.log(`📱 Using existing cached data: ${existingCache.length} assets`);
                     updateCachedAssetCount();
                 }
                 
@@ -448,18 +430,15 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
             });
             
             // Don't need to increase delays - we're already respecting rate limits
-            console.log(`⚠️ Failure detected but continuing with standard 2.5s delay (rate limit compliant)`);
             
             // For API rate limiting (429), wait longer with exponential backoff and multiple retries
             if (error.status === 429) {
                 // Progressive backoff: 30s, 60s, 90s for retries
                 const baseWaitTime = 30000; // Start with 30 seconds
                 const waitTime = baseWaitTime + ((consecutiveFailures - 1) * 30000);
-                console.log(`🚦 Rate limited on page ${page}, waiting ${waitTime}ms and retrying (attempt ${consecutiveFailures})...`);
                 await new Promise(resolve => setTimeout(resolve, waitTime));
                 
                 try {
-                    console.log(`🔄 Retrying page ${page}...`);
                     const retryProxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fullUrl)}`;
                     const retryResponse = await $.ajax({
                         url: retryProxyUrl,
@@ -497,7 +476,6 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
                         coinsAddedFromPage++;
                     });
                     
-                    console.log(`✅ Retry of page ${page} successful: +${coinsAddedFromPage} coins (total: ${allCryptos.length}/${cacheLimit})`);
                     
                 } catch (retryError) {
                     console.error(`💥 Retry of page ${page} also failed:`, retryError.message);
@@ -505,9 +483,6 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
                     // Allow more retries specifically for pages beyond 500 coins
                     const maxRetries = page <= 5 ? 2 : 5; // More retries for higher pages
                     if (consecutiveFailures >= maxRetries) {
-                        console.log(`🛑 Max retries reached (${consecutiveFailures}/${maxRetries}) for page ${page}. This is likely a CoinGecko limit for higher pages.`);
-                        console.log(`📊 Successfully cached ${allCryptos.length} coins out of requested ${cacheLimit}`);
-                        console.log(`💡 Note: CoinGecko free tier may have restrictions on accessing pages beyond 500 coins`);
                         break;
                     }
                     
@@ -515,12 +490,10 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
                     if (allCryptos.length === 0) {
                         throw new Error(`Failed to fetch any data. Could not fetch page ${page}.`);
                     }
-                    console.log(`⚠️ Continuing with ${allCryptos.length} coins from successful pages`);
                     // Continue to next page instead of breaking
                 }
             } else {
                 // For non-rate-limit errors, just skip this page and continue
-                console.log(`⚠️ Skipping page ${page} due to error, continuing with next page...`);
                 
                 // Don't break - just continue to the next page
                 // Only stop if we have no data at all
@@ -539,14 +512,7 @@ async function fetchAvailableAssetsEfficient(cacheLimit, pagesNeeded) {
     
     // Log final results with helpful information
     if (finalCryptos.length < cacheLimit) {
-        console.log(`✅ Sequential fetch complete: ${finalCryptos.length} cryptocurrencies cached (requested ${cacheLimit})`);
-        console.log(`📊 CoinGecko free tier limit reached: Typically restricts access beyond ~500 coins`);
-        console.log(`💡 Suggestions to cache more coins:`);
-        console.log(`   • Wait a few hours and try again (daily limits may reset)`);
-        console.log(`   • Consider CoinGecko Pro API for higher limits`);
-        console.log(`   • Use multiple API keys with rotation (advanced)`);
     } else {
-        console.log(`✅ Sequential fetch complete: ${finalCryptos.length} cryptocurrencies cached`);
     }
     
     saveAvailableAssets(finalCryptos);
@@ -562,10 +528,8 @@ function fetchAvailableAssets() {
     
     // Check if we need to refresh the complete token list (once per day)
     if (!lastFetched || parseInt(lastFetched) < oneDayAgo) {
-        console.log('🔄 Refreshing complete CoinGecko token list (daily update)...');
         return fetchAllCoinGeckoTokens();
     } else {
-        console.log('✅ Using cached CoinGecko token list');
         return Promise.resolve(getAllCoinGeckoTokens());
     }
 }
@@ -610,7 +574,6 @@ function fetchTop100FromCoinGecko() {
             icon_url: coin.image // CoinGecko provides excellent icons
         }));
         
-        console.log(`Fetched ${cryptoAssets.length} cryptocurrencies from CoinGecko (fallback mode, limited to ${perPage})`);
         saveAvailableAssets(cryptoAssets);
         localStorage.setItem('assetsLastFetched', Date.now().toString());
         updateCachedAssetCount();
@@ -662,7 +625,6 @@ function fetchCurrencyRates() {
     
     // If no API key is set, return a rejected promise
     if (!apiKey || apiKey === 'null' || apiKey.trim() === '') {
-        console.warn('Currency API key not configured, skipping currency rate fetch');
         return $.Deferred().reject({ 
             status: 401, 
             message: 'Currency API key not configured' 
@@ -690,7 +652,6 @@ function formatCurrency(value, currency = 'USD') {
         }).format(value);
     } catch (error) {
         // Fallback to USD if currency is invalid
-        console.warn(`Invalid currency code: ${currency}, falling back to USD`);
         return new Intl.NumberFormat('en-US', { 
             style: 'currency', 
             currency: 'USD' 
@@ -736,7 +697,6 @@ function decryptData(encryptedData, password) {
         
         return JSON.parse(decryptedText);
     } catch (error) {
-        console.warn('Decryption failed with password:', password, error);
         throw error;
     }
 }
@@ -849,46 +809,17 @@ window.addEventListener('unhandledrejection', (event) => {
     });
 });
 
-// Enhanced console logging with timestamps
-const originalLog = console.log;
-const originalError = console.error;
-const originalWarn = console.warn;
-
-console.log = function(...args) {
-    originalLog.apply(console, [`[${new Date().toISOString()}]`, ...args]);
-};
-
-console.error = function(...args) {
-    originalError.apply(console, [`[${new Date().toISOString()}] 🔴`, ...args]);
-};
-
-console.warn = function(...args) {
-    originalWarn.apply(console, [`[${new Date().toISOString()}] 🟡`, ...args]);
-};
 
 $(document).ready(() => {
-    console.log('🚀 Sovereign Bags app initializing...');
     
     // Check if running in Electron
     const isElectron = (typeof window !== 'undefined' && window.process && window.process.type === 'renderer') || 
                        (navigator.userAgent.toLowerCase().indexOf(' electron/') > -1) ||
                        (window.location.search.includes('electron=true'));
     
-    console.log('🔍 Environment check:', {
-        protocol: window.location.protocol,
-        userAgent: navigator.userAgent,
-        isElectron: isElectron,
-        url: window.location.href
-    });
     
     // Only show warning if NOT in Electron and using file:// protocol
     if (window.location.protocol === 'file:' && !isElectron) {
-        console.warn('⚠️ Running from file:// protocol detected!');
-        console.warn('This will cause CORS issues with external APIs.');
-        console.warn('Please run a local server instead:');
-        console.warn('1. Open terminal in app directory');
-        console.warn('2. Run: python3 server.py');
-        console.warn('3. Open: http://localhost:8000');
         
         // Show alert to user
         // alert('⚠️ Important: You\'re running this app directly from a file.\n\n' +
@@ -899,7 +830,6 @@ $(document).ready(() => {
         //       '3. Open: http://localhost:8000\n\n' +
         //       'See README.md for more details.');
     } else if (isElectron) {
-        console.log('✅ Running in Electron desktop app - API calls will work properly!');
     }
     
     // Load the currency options
@@ -913,7 +843,6 @@ $(document).ready(() => {
     $('#cache-limit').val(currentCacheLimit);
     $('#current-cache-limit').text(currentCacheLimit);
     
-    console.log(`💾 Loaded saved cache limit: ${currentCacheLimit} coins`);
     
     // Check if the Currency API key is set and display it in the input field if available
     const currencyApiKey = getCurrencyApiKey();
@@ -928,23 +857,19 @@ $(document).ready(() => {
     const savedCacheLimit = getCacheLimit();
     
     if (cachedAssets.length === 0 || !cacheTimestamp || parseInt(cacheTimestamp) < oneHourAgo) {
-        console.log(`🚀 Starting initial asset fetch with saved cache limit: ${savedCacheLimit} coins`);
         
         fetchAvailableAssets().then(() => {
-            console.log(`✅ Available assets loaded successfully with ${savedCacheLimit} coin limit`);
             // Update the cached asset count display
             updateCachedAssetCount();
         }).catch(error => {
             console.error('❌ Failed to load available assets:', error);
             // Try to use any existing cached data as fallback
             if (cachedAssets.length > 0) {
-                console.log(`⚠️ Using stale cached data: ${cachedAssets.length} assets`);
                 updateCachedAssetCount();
             }
         });
     } else {
         const cacheAge = Math.round((Date.now() - parseInt(cacheTimestamp)) / (60 * 1000));
-        console.log(`✅ Using cached assets: ${cachedAssets.length} coins (${cacheAge} minutes old)`);
         updateCachedAssetCount();
     }
 
@@ -1008,13 +933,9 @@ $('#save-cache-limit').click(() => {
         const pages = Math.ceil(limit / 100);
         const estimatedTime = Math.ceil(pages * 2.5); // Rate-limit compliant: 2.5 seconds per page
         
-        console.log(`💾 Cache limit updated to ${limit} coins`);
-        console.log(`📊 Will fetch ${pages} pages (estimated time: ${estimatedTime} seconds)`);
-        console.log(`🎯 Rate limit compliant: 2.5s delays (30 calls/min limit respected)`);
         
         // Trigger a new fetch with the updated limit
         fetchAvailableAssets().then(() => {
-            console.log(`✅ Assets reloaded with new cache limit: ${limit}`);
             $button.text(originalText).prop('disabled', false);
         }).catch(error => {
             console.error('❌ Failed to reload assets with new cache limit:', error);
@@ -1041,13 +962,11 @@ $('#add-coin-btn').click(() => {
 // Cache refresh button (refresh cached coins list and update portfolio)
 $('#refresh-cache-btn').click(() => {
     if (refreshInProgress) {
-        console.log('🔄 Refresh already in progress, please wait...');
         return;
     }
     
     const refreshStartTime = Date.now();
     const cacheLimit = getCacheLimit();
-    console.log(`🔄 Cache refresh and portfolio update triggered by user - fetching ${cacheLimit} coins...`);
     refreshInProgress = true;
     
     // Add visual feedback
@@ -1055,13 +974,10 @@ $('#refresh-cache-btn').click(() => {
     
     // Force refresh the coin cache, then update portfolio
     fetchAvailableAssets().then(() => {
-        console.log(`📊 Cache updated: ${getAvailableAssets().length} coins available`);
-        console.log('🔄 Now updating portfolio prices...');
         // Also refresh portfolio prices after cache update
         return refreshPrices();
     }).then(() => {
         const refreshDuration = Date.now() - refreshStartTime;
-        console.log(`✅ Cache refresh and portfolio update completed successfully in ${refreshDuration}ms`);
     }).catch(error => {
         console.error('❌ Cache refresh or portfolio update failed:', error);
         alert('Failed to refresh data. Please check your internet connection and try again.');
@@ -1175,7 +1091,6 @@ $('#save-coin-btn').click(() => {
             $('#coin-quantity').val('');
             $('#coin-modal').hide();
             
-            console.log(`Added/updated ${code} with ${qty} coins at $${data.rate}`);
         }).catch(error => {
             console.error('Failed to fetch coin data:', error);
             alert('Failed to fetch coin data. Please check the asset symbol.');
@@ -1267,7 +1182,6 @@ function updateTable(sortBy = null, sortOrder = null) {
 
 // Function to refresh all prices and update portfolio
 function refreshPrices() {
-    console.log('Refreshing crypto data and portfolio prices...');
     
     // Check if we have recent cached data (less than 5 minutes old)
     const cachedAssets = getAvailableAssets();
@@ -1277,19 +1191,16 @@ function refreshPrices() {
     // If we have recent cached data, use it instead of making new API calls
     if (cachedAssets.length > 0 && cacheTimestamp && parseInt(cacheTimestamp) > fiveMinutesAgo) {
         const cacheAge = Math.round((Date.now() - parseInt(cacheTimestamp)) / 60000);
-        console.log(`Using cached asset data (${cacheAge} minutes old, refreshing portfolio only)`);
         return updatePortfolioFromCache();
     }
     
     // Only fetch fresh data if cache is stale or missing
-    console.log('Cache is stale or missing, fetching fresh data from CoinGecko...');
     return fetchAvailableAssets().then(() => {
         return updatePortfolioFromCache();
     }).catch(error => {
         console.error('Failed to refresh prices:', error);
         // If API fails but we have cached data, use it
         if (cachedAssets.length > 0) {
-            console.log('API failed, falling back to cached data');
             return updatePortfolioFromCache();
         } else {
             alert('Failed to refresh prices. Please check your internet connection.');
@@ -1331,7 +1242,6 @@ function updatePortfolioFromCache() {
     const sortOrder = localStorage.getItem('sortOrder') || 'asc';
     updateTable(sortBy, sortOrder);
     
-    console.log(`Updated ${updatedHoldings.length} holdings from cached data`);
     return Promise.resolve();
 }
 
@@ -1410,7 +1320,6 @@ $(document).ready(function() {
     });
 
     function fetchData() {
-        console.log('Fetching data from API...');
         $.ajax({
             url: apiUrl,
             method: 'GET',
@@ -1419,7 +1328,6 @@ $(document).ready(function() {
             },
             success: function(response) {
                 if (response.status === 'success') {
-                    console.log('Data fetched successfully:', response.data);
                     allData = response.data.sort((a, b) => b.tvlUsd - a.tvlUsd);
                     filterAndDisplayData();
                 } else {
@@ -1437,7 +1345,6 @@ $(document).ready(function() {
             dataSource: data,
             pageSize: pageSize,
             callback: function(data, pagination) {
-                console.log('Rendering table with data:', data);
                 const $tbody = $('#crypto-table tbody');
                 $tbody.empty();
                 $.each(data, function(index, item) {

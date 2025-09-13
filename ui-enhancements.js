@@ -304,7 +304,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Enhance search inputs
     enhanceSearchInput('asset-search', (value) => {
-        console.log('Searching for:', value);
         // Search logic here
     });
     

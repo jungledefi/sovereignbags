@@ -51,7 +51,6 @@
             const start = (currentPage - 1) * settings.pageSize;
             const end = start + settings.pageSize;
             const paginatedData = settings.dataSource.slice(start, end);
-            console.log('Paginated data:', paginatedData);
             settings.callback(paginatedData, { currentPage, totalPages: Math.ceil(settings.dataSource.length / settings.pageSize) });
             renderPagination(Math.ceil(settings.dataSource.length / settings.pageSize));
         }

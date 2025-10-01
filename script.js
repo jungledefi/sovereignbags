@@ -204,6 +204,78 @@ function getCoinGeckoId(symbol) {
 // NEW PRIVACY-PRESERVING COIN SYSTEM  
 // ============================================
 
+// Function to detect if running locally vs on web server
+function isRunningLocally() {
+    // Check for file:// protocol or localhost/127.0.0.1
+    return window.location.protocol === 'file:' || 
+           window.location.hostname === 'localhost' || 
+           window.location.hostname === '127.0.0.1' ||
+           window.location.hostname === '';
+}
+
+// Function to make environment-aware API calls
+async function makeEnvironmentAwareAPICall(url) {
+    if (isRunningLocally()) {
+        // For local development: try direct call first, then proxy
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return await response.json();
+        } catch (directError) {
+            // Fall back to proxy for local development
+            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+            
+            const response = await $.ajax({
+                url: proxyUrl,
+                method: 'GET',
+                dataType: 'json',
+                timeout: 20000
+            });
+            
+            const responseData = JSON.parse(response.contents);
+            
+            // Check if the response is an error from CoinGecko API
+            if (responseData.status && responseData.status.error_code) {
+                throw new Error(`CoinGecko API Error: ${responseData.status.error_message}`);
+            }
+            
+            return responseData;
+        }
+    } else {
+        // For GitHub Pages: use alternative approach with rate limit handling
+        try {
+            // Try a different CORS proxy service for GitHub Pages
+            const corsAnywhereUrl = `https://cors-anywhere.herokuapp.com/${url}`;
+            
+            const response = await fetch(corsAnywhereUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return await response.json();
+        } catch (corsError) {
+            // Final fallback: use jsonp or cached approach for GitHub Pages
+            throw new Error('API calls not available in this environment. Please run locally for full functionality.');
+        }
+    }
+}
+
 // Function to fetch complete CoinGecko token list (all supported tokens)
 async function fetchAllCoinGeckoTokens() {
     // Check if we already have tokens in localStorage
@@ -222,19 +294,7 @@ async function fetchAllCoinGeckoTokens() {
     const apiUrl = 'https://api.coingecko.com/api/v3/coins/list';
     
     try {
-        // Try direct fetch first (works when served from web server)
-        const response = await fetch(apiUrl, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-            }
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const allTokens = await response.json();
+        const allTokens = await makeEnvironmentAwareAPICall(apiUrl);
         
         // Validate that we got an array of tokens
         if (!Array.isArray(allTokens)) {
@@ -246,55 +306,23 @@ async function fetchAllCoinGeckoTokens() {
         localStorage.setItem('allTokensLastFetched', Date.now().toString());
         
         return allTokens;
-    } catch (directError) {
-        // If direct fetch fails (CORS), try proxy as fallback
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`;
-        
-        try {
-            const response = await $.ajax({
-                url: proxyUrl,
-                method: 'GET',
-                dataType: 'json',
-                timeout: 20000
-            });
-            
-            const responseData = JSON.parse(response.contents);
-            
-            // Check if the response is an error from CoinGecko API
-            if (responseData.status && responseData.status.error_code) {
-                throw new Error(`CoinGecko API Error: ${responseData.status.error_message}`);
-            }
-            
-            // Validate that we got an array of tokens
-            if (!Array.isArray(responseData)) {
-                throw new Error('Invalid response format: expected array of tokens');
-            }
-            
-            const allTokens = responseData;
-            
-            // Store in localStorage with timestamp
-            localStorage.setItem('allCoinGeckoTokens', JSON.stringify(allTokens));
-            localStorage.setItem('allTokensLastFetched', Date.now().toString());
-            
-            return allTokens;
-        } catch (proxyError) {
-            // Clear the bad data from localStorage if it exists
-            const badData = localStorage.getItem('allCoinGeckoTokens');
-            if (badData) {
-                try {
-                    const parsed = JSON.parse(badData);
-                    if (parsed.status && parsed.status.error_code) {
-                        localStorage.removeItem('allCoinGeckoTokens');
-                        localStorage.removeItem('allTokensLastFetched');
-                    }
-                } catch (e) {
-                    // Ignore parsing errors here
+    } catch (error) {
+        // Clear the bad data from localStorage if it exists
+        const badData = localStorage.getItem('allCoinGeckoTokens');
+        if (badData) {
+            try {
+                const parsed = JSON.parse(badData);
+                if (parsed.status && parsed.status.error_code) {
+                    localStorage.removeItem('allCoinGeckoTokens');
+                    localStorage.removeItem('allTokensLastFetched');
                 }
+            } catch (e) {
+                // Ignore parsing errors here
             }
-            
-            // Return empty array if no valid cache available
-            return [];
         }
+        
+        // Return empty array if no valid cache available
+        return [];
     }
 }
 
@@ -626,7 +654,7 @@ function fetchTop100FromCoinGecko() {
 // Function to search assets by name or symbol (optimized for 500+ assets)
 function searchAssets(query) {
     const assets = getAllCoinGeckoTokens(); // Use complete token list
-    if (!query) return assets.slice(0, 30); // Return top 30 if no query
+    if (!query) return assets.slice(0, 100); // Return top 100 if no query
     
     const normalizedQuery = query.toLowerCase();
     
@@ -655,7 +683,6 @@ function searchAssets(query) {
         })
         .filter(item => item.score > 0)
         .sort((a, b) => b.score - a.score)
-        .slice(0, 40) // Show top 40 results for better UX
         .map(item => item.asset);
     
     return results;
@@ -745,7 +772,9 @@ function decryptData(encryptedData, password) {
 
 // Save holdings data to localStorage
 function saveHoldings(holdings, password) {
-    const encryptedData = encryptData(holdings, password);
+    // Use default password if none provided
+    const actualPassword = password || 'undefined';
+    const encryptedData = encryptData(holdings, actualPassword);
     localStorage.setItem('holdings', encryptedData);
 }
 
@@ -842,6 +871,16 @@ window.addEventListener('unhandledrejection', (event) => {
 
 $(document).ready(() => {
     
+    // Restore theme preference
+    const savedDarkMode = localStorage.getItem('darkMode');
+    if (savedDarkMode === 'true') {
+        document.body.classList.add('dark-mode');
+        const icon = document.querySelector('#dark-mode-toggle i') || document.getElementById('dark-mode-toggle');
+        if (icon) {
+            icon.className = 'fas fa-sun';
+        }
+    }
+    
     // Check if running in Electron
     const isElectron = (typeof window !== 'undefined' && window.process && window.process.type === 'renderer') || 
                        (navigator.userAgent.toLowerCase().indexOf(' electron/') > -1) ||
@@ -905,6 +944,12 @@ $(document).ready(() => {
     }
 
     // Auto-refresh handles price updates automatically
+    
+    // Check for shared portfolio in URL immediately if present
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('portfolio')) {
+        loadSharedPortfolio();
+    }
 });
 
 // Save Currency API key
@@ -1009,6 +1054,26 @@ $('.exit-coin-edit').click(() => {
     $('#coin-modal').hide();
 });
 
+// Hide coin modal (cancel button)
+$('.exit-coin-modal').click(() => {
+    // Clear form fields
+    $('#coin-code').val('');
+    $('#coin-symbol').val('');
+    $('#coin-quantity').val('');
+    
+    // Hide modal and clear selected asset
+    $('#coin-modal').hide();
+    window.selectedAsset = null;
+});
+
+// Add keyboard support for coin modal
+$('#coin-quantity').on('keypress', (e) => {
+    if (e.which === 13) { // Enter key
+        e.preventDefault();
+        $('#save-coin-btn').click();
+    }
+});
+
 // Hide modal
 $('.exit-settings').click(() => {
     $('#settings-modal').hide();
@@ -1073,10 +1138,16 @@ $(document).on('click', '.search-result-item', function() {
     // Pre-fill the add coin modal with selected asset
     $('#coin-code').val(assetSymbol.toUpperCase());
     $('#coin-symbol').val(assetName);
+    $('#coin-quantity').val(''); // Clear quantity field
     
     // Hide search modal and show add modal
     $('#coin-search-modal').hide();
     $('#coin-modal').show();
+    
+    // Focus on quantity input
+    setTimeout(() => {
+        $('#coin-quantity').focus();
+    }, 300);
 });
 
 // Add/Edit coin
@@ -1191,7 +1262,7 @@ function updateTable(sortBy = null, sortOrder = null) {
         const allocation = (total / totalValue) * 100;
         const row = `<tr>
             <td><div class="right"><div class="assetimgbox"><img src="${holding.icon_url || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiNGM0Y0RjYiLz4KPHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyUzYuNDggMjIgMTIgMjJTMjIgMTcuNTIgMjIgMTJTMTcuNTIgMiAxMiAyWiIgZmlsbD0iIzY2NjY2NiIvPgo8L3N2Zz4='}" alt="${holding.name}" width="32" height="32" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiNGM0Y0RjYiLz4KPHBhdGggZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDEyUzYuNDggMjIgMTIgMjJTMjIgMTcuNTIgMjIgMTJTMTcuNTIgMiAxMiAyWiIgZmlsbD0iIzY2NjY2NiIvPgo8L3N2Zz4='"><div class="asset-text">${holding.name}</div></div></div></td>
-            <td><div class="right">${formatRate(holding.rate * (exchangeRates[preferredCurrency]?.value || 1), preferredCurrency)} ${holding.quote_asset ? `(${holding.quote_asset})` : ''} ${formatDelta(holding.deltaday)}</div></td>
+            <td><div class="right">${formatRate(holding.rate * (exchangeRates[preferredCurrency]?.value || 1), preferredCurrency)} ${formatDelta(holding.deltaday)}</div></td>
             <td><div class="right">${formatQty(holding.quantity)}</div></td>
             <td><div class="right">${formatCurrency(total, preferredCurrency)}</div></td>
             <td><div class="right">${formatPercentage(allocation)}</div></td>
@@ -1414,6 +1485,164 @@ document.getElementById('dark-mode-toggle').addEventListener('click', function()
     } else {
         icon.className = 'fas fa-moon';
     }
+});
+
+// Share Portfolio Functionality
+function generateShareLink() {
+    const holdings = getHoldings();
+    if (!holdings || holdings.length === 0) {
+        alert('No holdings to share!');
+        return null;
+    }
+    
+    // Create a compact representation of the portfolio
+    const portfolioData = holdings.map(h => ({
+        id: h.coinGeckoId || h.id,
+        q: h.quantity,
+        s: h.symbol
+    }));
+    
+    // Convert to JSON and base64 encode
+    const jsonString = JSON.stringify(portfolioData);
+    const base64Data = btoa(jsonString);
+    
+    // Generate the share URL
+    const baseUrl = window.location.origin + window.location.pathname;
+    const shareUrl = `${baseUrl}?portfolio=${base64Data}`;
+    
+    return shareUrl;
+}
+
+function parseSharedPortfolio() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const portfolioParam = urlParams.get('portfolio');
+    
+    if (!portfolioParam) {
+        return null;
+    }
+    
+    try {
+        // Decode from base64
+        const decodedData = atob(portfolioParam);
+        const portfolioData = JSON.parse(decodedData);
+        
+        // Validate the data structure
+        if (!Array.isArray(portfolioData)) {
+            return null;
+        }
+        
+        return portfolioData;
+    } catch (error) {
+        return null;
+    }
+}
+
+async function loadSharedPortfolio() {
+    const sharedData = parseSharedPortfolio();
+    
+    if (!sharedData) {
+        return;
+    }
+    
+    // Show loading message
+    const confirmed = confirm('A shared portfolio was detected. Would you like to load it? This will replace your current holdings.');
+    
+    if (!confirmed) {
+        // Clear the URL parameter
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+    }
+    
+    // Clear existing holdings
+    localStorage.removeItem('holdings');
+    
+    // Get cached tokens first, only fetch if not available
+    let allTokens = getAllCoinGeckoTokens();
+    if (!allTokens || allTokens.length === 0) {
+        allTokens = await fetchAllCoinGeckoTokens();
+    }
+    
+    // Build holdings more efficiently
+    const newHoldings = sharedData.map(item => {
+        const token = allTokens.find(t => t.id === item.id || t.symbol === item.s);
+        if (token) {
+            return {
+                id: token.id,
+                coinGeckoId: token.id,
+                symbol: token.symbol,
+                name: token.name,
+                quantity: item.q,
+                rate: 0,
+                deltaday: 1,
+                icon_url: '',
+                quote_asset: 'USD'
+            };
+        }
+        return null;
+    }).filter(h => h !== null);
+    
+    if (newHoldings.length > 0) {
+        saveHoldings(newHoldings, 'undefined'); // Use default password
+        
+        // Clear the URL parameter after loading
+        window.history.replaceState({}, document.title, window.location.pathname);
+        
+        // Fetch prices for the newly loaded holdings
+        refreshPrices().then(() => {
+            alert(`Successfully loaded ${newHoldings.length} holdings from the shared portfolio!`);
+        });
+    } else {
+        alert('Could not load any holdings from the shared portfolio.');
+    }
+}
+
+// Initialize share portfolio event handlers when DOM is ready
+$(document).ready(function() {
+    // Share button click handler
+    $('#share-portfolio-btn').on('click', function() {
+        const shareLink = generateShareLink();
+        
+        if (shareLink) {
+            $('#share-link').val(shareLink);
+            $('#share-modal').css('display', 'block');
+        }
+    });
+
+    // Copy share link button
+    $('#copy-share-link').on('click', function() {
+        const shareLinkInput = document.getElementById('share-link');
+        shareLinkInput.select();
+        shareLinkInput.setSelectionRange(0, 99999); // For mobile devices
+        
+        navigator.clipboard.writeText(shareLinkInput.value).then(function() {
+            const button = $('#copy-share-link');
+            const originalText = button.text();
+            button.text('Copied!');
+            button.css('background', '#00C781');
+            
+            setTimeout(() => {
+                button.text(originalText);
+                button.css('background', '');
+            }, 2000);
+        }).catch(function() {
+            // Fallback for older browsers
+            document.execCommand('copy');
+            alert('Link copied to clipboard!');
+        });
+    });
+
+    // Close share modal
+    $('.exit-share-modal').on('click', function() {
+        $('#share-modal').css('display', 'none');
+    });
+
+    // Close modal when clicking outside
+    $(window).on('click', function(event) {
+        const shareModal = document.getElementById('share-modal');
+        if (event.target === shareModal) {
+            shareModal.style.display = 'none';
+        }
+    });
 });
 
 

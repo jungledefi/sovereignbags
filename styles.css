@@ -93,24 +93,7 @@ body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-/* Apply dark mode by default */
-body {
-    --neutral-100: #1A1A1A;
-    --neutral-200: #262626;
-    --neutral-300: #333333;
-    --neutral-400: #404040;
-    --neutral-500: #737373;
-    --neutral-600: #8C8C8C;
-    --neutral-700: #B3B3B3;
-    --neutral-800: #D9D9D9;
-    --neutral-900: #F5F5F5;
-    --primary-color: #3385FF;
-    --primary-hover: #000000;
-    --hover-text-color: #f3b723;
-    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
-    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
+/* Light mode is default - dark mode applied via .dark-mode class */
 
 .page {
     min-height: 100vh;
@@ -579,13 +562,20 @@ td:before {
     transform: translate(-50%, -50%);
     background: var(--neutral-100);
     border-radius: var(--radius-xl);
-    padding: var(--spacing-xl);
+    padding: var(--spacing-2xl);
     width: 90%;
     max-width: 500px;
     max-height: 80vh;
     overflow-y: auto;
     box-shadow: var(--shadow-xl);
     animation: slideUp var(--transition-slow);
+}
+
+.modal-content h2 {
+    margin: 0 0 var(--spacing-xl) 0;
+    font-size: 20px;
+    color: var(--neutral-900);
+    font-weight: 600;
 }
 
 @keyframes slideUp {
@@ -635,13 +625,32 @@ input[type="number"],
 input[type="password"],
 select {
     width: 100%;
-    padding: var(--spacing-sm) var(--spacing-md);
+    padding: var(--spacing-md) var(--spacing-md);
     border: 2px solid var(--neutral-300);
     border-radius: var(--radius-md);
     font-size: 14px;
     transition: all var(--transition-fast);
     background: var(--neutral-100);
     color: var(--neutral-900);
+    margin-bottom: var(--spacing-md);
+    box-sizing: border-box;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="password"]:focus,
+select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1);
+}
+
+/* Modal Buttons Container */
+.modal-buttons {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-xl);
+    justify-content: flex-end;
 }
 
 /* All Buttons - Black Theme */
@@ -653,12 +662,13 @@ button,
     background: #000000;
     color: white;
     border: none;
-    padding: var(--spacing-sm) var(--spacing-lg);
+    padding: var(--spacing-md) var(--spacing-xl);
     border-radius: var(--radius-md);
     font-weight: 500;
     cursor: pointer;
     transition: all var(--transition-base);
     font-size: 14px;
+    min-width: 120px;
 }
 
 button:hover,
@@ -673,15 +683,106 @@ button:hover,
 }
 
 /* Cancel/Secondary buttons */
-.exit-coin-modal,
-button.secondary {
-    background: var(--neutral-600);
+.modal-buttons button.exit-coin-modal,
+.modal-buttons button[class*="exit-"],
+button[class*="exit-"] {
+    background: var(--neutral-300);
+    color: var(--neutral-700);
 }
 
-.exit-coin-modal:hover,
-button.secondary:hover {
-    background: var(--neutral-700);
+.modal-buttons button.exit-coin-modal:hover,
+.modal-buttons button[class*="exit-"]:hover,
+button[class*="exit-"]:hover {
+    background: var(--neutral-400);
+    color: var(--neutral-800);
 }
+
+/* Settings Modal Specific */
+.Settings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+}
+
+.APISettings {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: flex-start;
+}
+
+.APISettings input {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.APISettings button {
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.LangSettings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.label1 {
+    font-weight: 500;
+    color: var(--neutral-700);
+    margin-bottom: var(--spacing-xs);
+    display: block;
+}
+
+/* Form Groups */
+.form-group {
+    margin-bottom: var(--spacing-lg);
+}
+
+.form-group label {
+    display: block;
+    font-weight: 500;
+    color: var(--neutral-700);
+    margin-bottom: var(--spacing-xs);
+    font-size: 14px;
+}
+
+.form-group input,
+.form-group select {
+    margin-bottom: 0;
+}
+
+/* Add Coin Modal Specific Styling */
+#coin-modal .modal-content {
+    max-width: 420px;
+}
+
+#coin-modal h2 {
+    text-align: center;
+    margin-bottom: var(--spacing-2xl);
+    font-size: 22px;
+    color: var(--neutral-900);
+}
+
+#coin-modal .form-group:last-of-type {
+    margin-bottom: var(--spacing-2xl);
+}
+
+#coin-modal .modal-buttons {
+    justify-content: space-between;
+    gap: var(--spacing-md);
+}
+
+#coin-modal .modal-buttons button {
+    flex: 1;
+    min-width: 120px;
+}
+
+#coin-modal input[readonly] {
+    background-color: var(--neutral-200);
+    cursor: not-allowed;
+    color: var(--neutral-600);
+}
+
 
 input:focus,
 select:focus {
@@ -692,7 +793,7 @@ select:focus {
 
 /* Search Results */
 .search-results-container {
-    max-height: 300px;
+    max-height: 400px;
     overflow-y: auto;
     margin-top: var(--spacing-sm);
     border: 1px solid var(--neutral-300);
